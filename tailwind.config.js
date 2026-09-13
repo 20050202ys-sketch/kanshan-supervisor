@@ -6,6 +6,9 @@ export default {
       colors: {
         // 刘看山主题色 & 知识节点状态色
         mountain: { DEFAULT: "#2f6f5e", dark: "#1f4a3e", light: "#e6f2ee" },
+        ink: "#192722",
+        paper: "#f3f7f4",
+        blue: "#31709c",
         node: {
           gray: "#c7ccd1", // 未学习
           yellow: "#f5c542", // 接触过、不稳定
