@@ -1,4 +1,5 @@
 import type { MasteryResult } from "../types";
+import { matchDemoEvaluation } from "./demoFixtures";
 
 // ============================================================
 // 评估Agent（1 天版：把教学/追问/评估合并成一次 LLM 调用）
@@ -64,8 +65,8 @@ export interface EvaluateInput {
 }
 
 export async function evaluate(input: EvaluateInput): Promise<MasteryResult> {
-  // 无 key：直接兜底，保证演示不卡（可在 UI 用"演示模式"手动给出理想结果）
-  if (!API_KEY) return FALLBACK;
+  // 无 key：演示脚本走已审核样例，其他回答仍走通用兜底。
+  if (!API_KEY) return matchDemoEvaluation(input.userAnswer) ?? FALLBACK;
 
   const userMsg = `知识点：${input.nodeTitle}
 参考片段：${input.cardSnippet}
