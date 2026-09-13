@@ -117,3 +117,76 @@ export const DEMO_FOCUS_NODE = "llm_boundary";
 export const DEMO_FOCUS_CARD = "card_llm_1";
 // 演示时故意遗漏的关键点（第十五章 2:00 段）
 export const DEMO_MISSING_POINT = "模型可能产生事实错误（幻觉）";
+
+// 动态补学应用题（PRD F07）：答错/未完全掌握时，按节点弹一道应用题巩固
+// 每个节点至少配 1 道；answerIndex 是正确选项下标（从 0 开始）
+export const PRACTICE: Record<string, QuizItem[]> = {
+  role: [
+    {
+      id: "p_role_1",
+      question: "作为 AI 产品经理，下面哪件事最该由你负责？",
+      options: [
+        "亲自训练一个大模型",
+        "定义模型的使用边界和出错时的兜底方案",
+        "编写底层推理框架",
+        "决定服务器用什么品牌",
+      ],
+      answerIndex: 1,
+    },
+  ],
+  llm_boundary: [
+    {
+      id: "p_llm_1",
+      question: "用户问模型“今天的天气”，模型一本正经地编了一个答案。这最能说明什么？",
+      options: [
+        "模型联网失败了",
+        "模型会预测下一个词，但不保证事实正确（可能幻觉）",
+        "模型坏了需要重启",
+        "这是正常且准确的回答",
+      ],
+      answerIndex: 1,
+    },
+  ],
+  prompt: [
+    {
+      id: "p_prompt_1",
+      question: "你希望模型只返回 JSON，但它每次都多写一堆解释。最该补充 Prompt 的哪一部分？",
+      options: ["目标", "背景", "约束与输出格式", "礼貌用语"],
+      answerIndex: 2,
+    },
+  ],
+  rag_agent: [
+    {
+      id: "p_rag_1",
+      question: "一个客服系统能自己判断“该查订单还是该转人工”并执行。它更接近？",
+      options: ["普通问答", "固定工作流", "Agent（自主决策）", "纯 RAG 检索"],
+      answerIndex: 2,
+    },
+  ],
+  data_eval: [
+    {
+      id: "p_eval_1",
+      question: "要判断一个 AI 翻译工具好不好，下面哪种做法更靠谱？",
+      options: [
+        "自己随手试两句觉得还行",
+        "用一批固定的测试句子，量化准确性和稳定性",
+        "看界面好不好看",
+        "问模型自己翻得怎么样",
+      ],
+      answerIndex: 1,
+    },
+  ],
+  product_fit: [
+    {
+      id: "p_fit_1",
+      question: "下面哪个场景最不适合直接用大模型？",
+      options: [
+        "帮用户润色一段文案",
+        "给客服回答生成初稿",
+        "计算银行转账的精确金额",
+        "总结一篇长文章",
+      ],
+      answerIndex: 2,
+    },
+  ],
+};
