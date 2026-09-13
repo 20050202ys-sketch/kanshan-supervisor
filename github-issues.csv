@@ -1,0 +1,31 @@
+﻿title,body,labels,assignee,milestone
+建仓与项目初始化,"创建 public 仓库 kanshan-supervisor，加 MIT License + README，推送已生成的 Vite+React+TS+Tailwind 骨架。
+
+验收：main 分支能 npm ci && npm run build 通过。",P0|infra|setup,,Day0-地基
+配置 GitHub Pages 自动部署,"Settings→Pages→Source 选 GitHub Actions；确认 .github/workflows/deploy.yml 生效，push main 自动构建部署，base 自动按仓库名设置。
+
+验收：公网 URL 能打开首页。",P0|infra|deploy,,Day0-地基
+冻结接口契约 types.ts,两人一起确认 src/types.ts 中 CameraEvent / MasteryResult / NodeStatus 等类型，冻结后各自 mock 对方数据并行开发。,P0|infra|contract,,Day0-地基
+建立 GitHub Projects 看板,建看板，分 P0/P1/P2 三列，把本 CSV 全部 issue 录入并归类。P2 默认不做。,P1|infra|planning,,Day0-地基
+首页 Home 页面,实现 PRD 9.1/F01：刘看山主视觉、一句话介绍、三天课程预览、开始学习按钮。未登录可进入。,P0|frontend|A,,Day1-主轴
+学习页三栏布局 Learn,PRD 9.4：左知识卡、中任务+回答+反馈、右刘看山+摄像头+进度。响应式。,P0|frontend|A,,Day1-主轴
+知识地图组件 KnowledgeMap,PRD F12/5.2：六节点登山路线，按 locked/gray/yellow/green 状态变色，点击可切换当前节点。,P0|frontend|A,,Day1-主轴
+学习状态与 localStorage,PRD 第十一章：Zustand store 管理 mastery_map / current_node / attempts，刷新保留进度。,P0|frontend|state|B,,Day1-主轴
+评估 Agent + JSON 容错,PRD F06：evaluate() 调 LLM 强制返回 MasteryResult；解析失败/无 key 走默认分支，绝不卡死演示。,P0|agent|B,,Day1-主轴
+知乎知识卡内容精选,PRD F04：补齐 6 节点知识卡（标题/作者/核心片段/原文链接），只放必要片段，保留署名，AI 总结与原文区分。至少每节点 1 张。,P0|content|B,,Day1-主轴
+摸底题与结果初始化,PRD F02：3 道选择题检测模型/Agent/评测基础，初始化知识节点状态；跳过走零基础路线。1 天版结果可写死。,P1|content|B,,Day1-主轴
+摄像头授权与告知面板,PRD F08：默认关闭，开启前明确告知检测目的/本地处理/不上传不录像不保存/可随时关闭；拒绝授权回落普通模式。,P0|camera|A,,Day2-摄像头
+MediaPipe 本地分心检测,PRD F09：接入 FaceLandmarker，判断在席/持续转头/持续低头，产出 CameraEvent；画面绝不上传，只发状态事件。,P0|camera|A,,Day2-摄像头
+看山铁拳动画,PRD F11：拳头放大+屏幕震动+卡通裂纹+幽默文案，≤3 秒，可关动画和声音，无暴力/血腥/羞辱文案，我回来了恢复。,P0|frontend|A,,Day2-摄像头
+督学分级提醒规则,PRD F10：探头→敲屏→铁拳分级；两次提醒间隔≥60s，纠正误判后不升级，单任务≤2 次铁拳，摄像头不可用不触发。,P0|agent|B,,Day2-摄像头
+误判纠正入口,PRD F09：提供看山你看错了按钮，纠正后本次事件不升级。,P0|camera|A,,Day2-摄像头
+动态补学逻辑,PRD F07：答错只补相关知识不重建课程，同节点最多补学两次，两次未过标黄允许继续。,P0|agent|B,,Day3-彩排
+演示模式（手动触发/跳转）,手动触发看山铁拳 + 一键跳到指定演示知识点，作为现场保命后路。,P0|frontend|A,,Day3-彩排
+结课报告,PRD F13(P1)：已掌握/待巩固/最擅长模块/推荐阅读/学习数据/刘看山评价；不公开摄像头状态与分心次数。,P1|frontend|B,,Day3-彩排
+演示话术 LLM 输出预跑,PRD 第十七章：把演示脚本用到的复述、故意漏点等 LLM 回答提前测通并固化，避免现场翻车。,P0|qa|B,,Day3-彩排
+3 分钟演示脚本彩排,按 PRD 第十五章完整彩排至少 3 遍：首页→摸底→知识卡→分心触发铁拳→回答漏点→评估插题→节点变绿。,P0|qa|A|B,,Day3-彩排
+MVP 完成标准自检,PRD 第十八章 10 条逐项核对：完整学习任务、掌握度判断、路径改变、摄像头开关、分级提醒、铁拳稳定、误判纠正、地图实时更新、内容有来源、公网可访问。,P0|qa|A|B,,Day3-彩排
+[P2] 知乎账号登录,PRD 第十六章 P2：MVP 不做，占位记录。,P2|backlog,,P2-暂不做
+[P2] 收藏夹内容转换,PRD 第十六章 P2：MVP 不做，占位记录。,P2|backlog,,P2-暂不做
+[P2] 任意主题学习,PRD 第十六章 P2：MVP 不做，占位记录。,P2|backlog,,P2-暂不做
+[P2] 好友共同学习,PRD 第十六章 P2：MVP 不做，占位记录。,P2|backlog,,P2-暂不做
