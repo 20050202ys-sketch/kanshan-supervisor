@@ -5,6 +5,7 @@ import type { CameraEvent } from "../types";
 const STATUS_TEXT: Record<DetectStatus, string> = {
   idle: "摄像头已关闭",
   starting: "正在启动摄像头…",
+  "loading-model": "正在加载检测模型…",
   running: "本地检测中（画面不上传）",
   denied: "已拒绝授权 · 使用普通学习模式",
   error: "摄像头不可用 · 使用普通学习模式",
