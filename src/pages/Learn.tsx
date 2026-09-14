@@ -6,7 +6,7 @@ import CameraPanel from "../components/CameraPanel";
 import Icon from "../components/Icon";
 import KanshanPunch from "../components/KanshanPunch";
 import LiuKanshan from "../components/LiuKanshan";
-import { CARDS, DEMO_FOCUS_NODE, NODES } from "../data/content";
+import { CARDS, DEMO_FOCUS_NODE, NODES, PRACTICE } from "../data/content";
 import { useStore } from "../store/useStore";
 import type { MasteryResult } from "../types";
 
@@ -22,9 +22,13 @@ export default function Learn({ onNavigate }: { onNavigate: (page: Page) => void
 
   const node = useMemo(() => NODES.find((item) => item.id === current) ?? NODES[0], [current]);
   const card = useMemo(() => CARDS.find((item) => item.nodeId === current) ?? CARDS[0], [current]);
+  const practiceQuiz = useMemo(() => (PRACTICE[current] ?? [])[0] ?? null, [current]);
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MasteryResult | null>(null);
+  const [showPractice, setShowPractice] = useState(false);
+  const [picked, setPicked] = useState<number | null>(null);
+  const [practiceMsg, setPracticeMsg] = useState("");
   const [line, setLine] = useState("我会陪你学，不会上传你的画面。");
   const [question, setQuestion] = useState("");
   const [assistantReply, setAssistantReply] = useState("大语言模型擅长处理语言模式，但事实与计算结果需要额外验证。");
@@ -34,16 +38,69 @@ export default function Learn({ onNavigate }: { onNavigate: (page: Page) => void
   const learnedCount = Object.values(mastery).filter((status) => status === "green").length;
   const currentIndex = NODES.findIndex((item) => item.id === current);
 
+  function changeNode(id: string) {
+    setCurrentNode(id);
+    setResult(null);
+    setAnswer("");
+    setShowPractice(false);
+    setPicked(null);
+    setPracticeMsg("");
+    supervisor.resetForNewTask();
+  }
+
   async function submit() {
     if (!answer.trim() || loading) return;
     setLoading(true);
     setLine("嗯，我在听……");
+    setPracticeMsg("");
     incAttempt();
-    const nextResult = await evaluate({ nodeTitle: node.title, cardSnippet: card?.snippet ?? "", userAnswer: answer, attempt: attempts + 1 });
+    const nextResult = await evaluate({
+      nodeTitle: node.title,
+      cardSnippet: card?.snippet ?? "",
+      userAnswer: answer,
+      attempt: attempts + 1,
+    });
     setResult(nextResult);
-    applyMastery(node.id, nextResult);
-    setLine(nextResult.next_action === "advance" ? "不错，你已经能用自己的话讲明白了。" : "方向对了，再补一个具体例子会更清楚。");
+
+    if (nextResult.next_action === "advance" || nextResult.mastery === "mastered") {
+      applyMastery(node.id, nextResult);
+      setShowPractice(false);
+      setLine("不错，你已经能用自己的话讲明白了。");
+    } else if (practiceQuiz) {
+      setShowPractice(true);
+      setPicked(null);
+      setLine("方向对了，还差一点。来做一道应用题巩固一下。");
+    } else {
+      applyMastery(node.id, nextResult);
+      setLine("方向对了，再补一个具体例子会更清楚。");
+    }
     setLoading(false);
+  }
+
+  function submitPractice() {
+    if (picked === null || !practiceQuiz || !result) return;
+    if (picked === practiceQuiz.answerIndex) {
+      const mastered: MasteryResult = { ...result, mastery: "mastered", next_action: "advance" };
+      applyMastery(node.id, mastered);
+      setResult(mastered);
+      setPracticeMsg("答对了，这个知识点已标记为掌握。");
+      setLine("漂亮，这下真的懂了，可以继续往下学。");
+      setShowPractice(false);
+      return;
+    }
+
+    incAttempt();
+    if (attempts + 1 >= 2) {
+      const partial: MasteryResult = { ...result, mastery: "partial", next_action: "practice" };
+      applyMastery(node.id, partial);
+      setResult(partial);
+      setPracticeMsg("暂时标记为待巩固，你可以继续学习，之后再回来看看。");
+      setLine("没关系，先记成待巩固，别卡在这里。");
+      setShowPractice(false);
+    } else {
+      setPracticeMsg("再想想，回到上方知识卡看看后重新选择。");
+      setLine("差一点，回去看看知识卡再选。");
+    }
   }
 
   function askAssistant() {
@@ -68,13 +125,13 @@ export default function Learn({ onNavigate }: { onNavigate: (page: Page) => void
             {NODES.map((item, index) => {
               const status = mastery[item.id];
               return <li key={item.id} className={item.id === current ? "is-current" : status === "green" ? "is-done" : status === "locked" ? "is-locked" : ""}>
-                <button type="button" disabled={status === "locked"} onClick={() => { setCurrentNode(item.id); setResult(null); setAnswer(""); supervisor.resetForNewTask(); }}>
+                <button type="button" disabled={status === "locked"} onClick={() => changeNode(item.id)}>
                   <span>{status === "green" ? <Icon name="check" /> : index + 1}</span><span><b>第 {index + 1} 课</b><small>{item.title}</small></span>{status === "locked" && <Icon name="lock" />}
                 </button>
               </li>;
             })}
           </ol>
-          <button type="button" className="demo-link" onClick={() => setCurrentNode(DEMO_FOCUS_NODE)}>跳到演示知识点</button>
+          <button type="button" className="demo-link" onClick={() => changeNode(DEMO_FOCUS_NODE)}>跳到演示知识点</button>
         </aside>
 
         <section className="lesson-canvas panel">
@@ -87,12 +144,32 @@ export default function Learn({ onNavigate }: { onNavigate: (page: Page) => void
             {card?.aiSummary && <div className="ai-highlight"><Icon name="brain" /><span><b>AI 划重点</b>{card.aiSummary}</span></div>}
             <a href={card?.sourceUrl} target="_blank" rel="noreferrer">阅读知乎原文 ↗</a>
           </article>
+
           <div className="explain-task">
             <h2>现在，讲给看山听</h2>
             <textarea value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="不要照抄原文，用自己的话说，最好举个例子…" />
+            <button type="button" className="demo-fill" onClick={() => setAnswer("大语言模型很擅长写文案、做总结和多轮对话，能根据海量文本生成很自然的回答。")}>填入演示答案</button>
             <div><button type="button" className="button button--outline" onClick={() => onNavigate("course")}>上一页</button><button type="button" className="button button--primary" onClick={submit} disabled={!answer.trim() || loading}>{loading ? "评估中…" : "讲给刘看山听"}<Icon name="arrow" /></button></div>
           </div>
+
           {result && <div className="result-card" aria-live="polite"><strong>{result.mastery === "mastered" ? "已掌握" : result.mastery === "partial" ? "待巩固" : "需要再学一次"}</strong><p>{result.understood_points.join("；")}</p>{result.missing_points.length > 0 && <p>再补充：{result.missing_points.join("；")}</p>}<button type="button" onClick={() => onNavigate("finish")}>查看学习报告 →</button></div>}
+
+          {showPractice && practiceQuiz && (
+            <section className="practice-card" aria-label="补学应用题">
+              <div className="practice-card__title"><span className="icon-tile"><Icon name="book" /></span><div><strong>补学应用题</strong><p>{practiceQuiz.question}</p></div></div>
+              <div className="practice-options">
+                {practiceQuiz.options.map((option, index) => (
+                  <label className={picked === index ? "is-selected" : ""} key={option}>
+                    <input type="radio" name="practice" checked={picked === index} onChange={() => setPicked(index)} />
+                    <span>{option}</span>
+                  </label>
+                ))}
+              </div>
+              <button type="button" className="button button--primary" onClick={submitPractice} disabled={picked === null}>提交答案</button>
+              {practiceMsg && <p className="practice-card__message" aria-live="polite">{practiceMsg}</p>}
+            </section>
+          )}
+          {!showPractice && practiceMsg && <p className="practice-confirm" aria-live="polite">{practiceMsg}</p>}
         </section>
 
         <aside className="learn-tools">

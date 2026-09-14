@@ -25,7 +25,7 @@ export default function Home({ onNavigate }: { onNavigate: (page: Page) => void 
                   <i><b style={{ width: "33%" }} /></i>
                 </div>
               </div>
-              <button className="button button--primary" type="button" onClick={() => onNavigate("learn")}>
+              <button className="button button--primary" type="button" onClick={() => onNavigate("quiz")}>
                 继续学习 <Icon name="arrow" />
               </button>
             </article>
