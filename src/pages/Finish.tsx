@@ -2,9 +2,11 @@ import { useStore } from "../store/useStore";
 import { NODES } from "../data/content";
 import KnowledgeMap from "../components/KnowledgeMap";
 import LiuKanshan from "../components/LiuKanshan";
+import type { Page } from "../App";
+import SiteHeader from "../components/SiteHeader";
 
 // 结课页（PRD 9.5 / F13，P1）：1 天版做精简总结，不含分享卡
-export default function Finish({ onRestart }: { onRestart: () => void }) {
+export default function Finish({ onNavigate }: { onNavigate: (page: Page) => void }) {
   const mastery = useStore((s) => s.mastery_map);
   const reset = useStore((s) => s.reset);
 
@@ -12,8 +14,11 @@ export default function Finish({ onRestart }: { onRestart: () => void }) {
   const yellow = NODES.filter((n) => mastery[n.id] === "yellow");
 
   return (
-    <div className="mx-auto grid min-h-screen max-w-4xl grid-cols-1 gap-6 p-6 md:grid-cols-2">
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <main className="page page--finish">
+      <div className="page-wrap">
+      <SiteHeader current="my-learning" onNavigate={onNavigate} />
+      <div className="finish-grid">
+      <section className="panel finish-report">
         <h1 className="text-2xl font-bold text-mountain-dark">结课报告</h1>
         <p className="mt-1 text-sm text-gray-500">刘看山陪你爬完了这段山路</p>
 
@@ -37,29 +42,31 @@ export default function Finish({ onRestart }: { onRestart: () => void }) {
 
         <div className="mt-5 flex gap-3">
           <button
-            onClick={onRestart}
-            className="rounded-full bg-mountain px-6 py-2 font-semibold text-white hover:bg-mountain-dark"
+            onClick={() => onNavigate("my-learning")}
+            className="button button--primary"
           >
             返回首页
           </button>
           <button
             onClick={() => {
               reset();
-              onRestart();
+              onNavigate("home");
             }}
-            className="rounded-full border border-gray-300 px-6 py-2 text-gray-600 hover:bg-gray-50"
+            className="button button--outline"
           >
             清空进度重新开始
           </button>
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
+      <section className="panel finish-companion">
         <LiuKanshan reaction="idle" />
         <div className="mt-4">
           <KnowledgeMap />
         </div>
       </section>
-    </div>
+      </div>
+      </div>
+    </main>
   );
 }

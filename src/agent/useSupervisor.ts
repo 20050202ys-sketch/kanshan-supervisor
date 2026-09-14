@@ -18,7 +18,6 @@ const MAX_PUNCH_PER_TASK = 2; // 单任务最多两次铁拳
 export function useSupervisor() {
   const [reaction, setReaction] = useState<SupervisorReaction>("none");
   const lastRemindAt = useRef(0);
-  const escalation = useRef(0); // 0->peek 1->knock 2+->punch
   const punchCount = useRef(0);
   const correctedUntil = useRef(0); // 纠正误判后的静默截止时间
 
@@ -28,21 +27,10 @@ export function useSupervisor() {
     if (now < correctedUntil.current) return "none"; // 刚纠正过，静默
     if (now - lastRemindAt.current < MIN_INTERVAL_MS) return "none"; // 间隔不足
 
-    let next: SupervisorReaction;
-    if (escalation.current === 0) next = "peek";
-    else if (escalation.current === 1) next = "knock";
-    else next = "punch";
-
-    if (next === "punch") {
-      if (punchCount.current >= MAX_PUNCH_PER_TASK) {
-        next = "knock"; // 达到铁拳上限，降级为敲屏
-      } else {
-        punchCount.current += 1;
-      }
-    }
+    const next: SupervisorReaction = punchCount.current >= MAX_PUNCH_PER_TASK ? "knock" : "punch";
+    if (next === "punch") punchCount.current += 1;
 
     lastRemindAt.current = now;
-    escalation.current += 1;
     setReaction(next);
     return next;
   }, []);
@@ -50,7 +38,6 @@ export function useSupervisor() {
   // 用户点击「看山你看错了」纠正误判 -> 本次事件不再升级（PRD F09/F10）
   const correctMisjudge = useCallback(() => {
     correctedUntil.current = Date.now() + MIN_INTERVAL_MS;
-    escalation.current = Math.max(0, escalation.current - 1);
     setReaction("none");
   }, []);
 
@@ -64,7 +51,6 @@ export function useSupervisor() {
 
   // 进入新任务时重置计数
   const resetForNewTask = useCallback(() => {
-    escalation.current = 0;
     punchCount.current = 0;
     lastRemindAt.current = 0;
     correctedUntil.current = 0;

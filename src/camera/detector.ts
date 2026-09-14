@@ -1,71 +1,92 @@
+import { FaceLandmarker, FilesetResolver, type NormalizedLandmark } from "@mediapipe/tasks-vision";
 import type { CameraEvent, CameraReason } from "../types";
-
-// ============================================================
-// 本地摄像头分心检测（PRD F09）
-// 原则：画面只在本地分析，绝不上传；只对外产出 CameraEvent 状态事件。
-// 1 天版策略：MediaPipe 通过 CDN 动态加载；若加载/授权失败，检测降级为
-//            "不产生事件"，绝不阻断课程（PRD F08：拒绝授权走普通模式）。
-//
-// ⚠️ TODO(A同学)：接入 MediaPipe FaceLandmarker，用 landmark 计算
-//   - 人是否在画面内 -> face_absent
-//   - 是否持续转头   -> head_turn（用鼻尖 x 相对两眼中心的偏移判断）
-//   - 是否持续低头   -> head_down（用鼻尖 y / 眼-嘴垂直比判断）
-// 下面给出一个基于 "getUserMedia + 定时采样" 的骨架与阈值位，
-// 目前用简单的"亮度/无信号"占位，替换为真实 landmark 逻辑即可。
-// ============================================================
 
 export interface DetectorOptions {
   video: HTMLVideoElement;
-  // 每当判定为一次持续分心时回调（已按最短持续时间聚合）
-  onEvent: (e: CameraEvent) => void;
-  // 检测状态提示（PRD F09：页面提供检测状态提示）
+  onEvent: (event: CameraEvent) => void;
   onStatus?: (status: DetectStatus) => void;
+  onAttention?: (state: AttentionState) => void;
 }
 
 export type DetectStatus = "idle" | "starting" | "running" | "denied" | "error";
+export type AttentionState = "focused" | "face_absent" | "head_turn" | "head_down";
 
-// 触发阈值（PRD 第十七章：用较长触发时间，避免误判）
-const ABSENT_SECONDS = 6; // 持续离开画面判定为可能分心
+const DISTRACTION_SECONDS = 6;
+const SAMPLE_MS = 650;
+const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
+
+let landmarkerPromise: Promise<FaceLandmarker> | null = null;
+
+function getLandmarker() {
+  if (!landmarkerPromise) {
+    landmarkerPromise = FilesetResolver.forVisionTasks(WASM_ROOT).then((vision) =>
+      FaceLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: `${import.meta.env.BASE_URL}models/face_landmarker.task` },
+        runningMode: "VIDEO",
+        numFaces: 1,
+        minFaceDetectionConfidence: 0.55,
+        minFacePresenceConfidence: 0.55,
+        minTrackingConfidence: 0.5,
+      })
+    );
+  }
+  return landmarkerPromise;
+}
 
 export class DistractionDetector {
   private stream: MediaStream | null = null;
   private timer: number | null = null;
-  private absentAccum = 0;
+  private distractedFor = 0;
   private lastTick = 0;
+  private lastVideoTime = -1;
   private opts: DetectorOptions;
   private status: DetectStatus = "idle";
+  private landmarker: FaceLandmarker | null = null;
+  private activeReason: CameraReason | null = null;
 
   constructor(opts: DetectorOptions) {
     this.opts = opts;
   }
 
-  private setStatus(s: DetectStatus) {
-    this.status = s;
-    this.opts.onStatus?.(s);
+  private setStatus(status: DetectStatus) {
+    this.status = status;
+    this.opts.onStatus?.(status);
   }
 
   async start(): Promise<boolean> {
     this.setStatus("starting");
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+        audio: false,
+      });
     } catch {
-      this.setStatus("denied"); // 拒绝授权 -> 普通学习模式（PRD F08）
+      this.setStatus("denied");
       return false;
     }
-    this.opts.video.srcObject = this.stream;
-    await this.opts.video.play().catch(() => {});
-    this.lastTick = performance.now();
-    this.setStatus("running");
-    this.timer = window.setInterval(() => this.tick(), 500);
-    return true;
+
+    try {
+      this.opts.video.srcObject = this.stream;
+      await this.opts.video.play();
+      this.landmarker = await getLandmarker();
+      this.lastTick = performance.now();
+      this.setStatus("running");
+      this.timer = window.setInterval(() => this.tick(), SAMPLE_MS);
+      return true;
+    } catch {
+      this.stopTracks();
+      this.setStatus("error");
+      return false;
+    }
   }
 
   stop() {
     if (this.timer) window.clearInterval(this.timer);
     this.timer = null;
-    this.stream?.getTracks().forEach((t) => t.stop());
-    this.stream = null;
-    this.absentAccum = 0;
+    this.stopTracks();
+    this.distractedFor = 0;
+    this.activeReason = null;
+    this.opts.onAttention?.("focused");
     this.setStatus("idle");
   }
 
@@ -73,36 +94,73 @@ export class DistractionDetector {
     return this.status;
   }
 
-  // 占位检测：真实实现请替换为 MediaPipe landmark 判断
-  private tick() {
-    const now = performance.now();
-    const dt = (now - this.lastTick) / 1000;
-    this.lastTick = now;
+  private stopTracks() {
+    this.stream?.getTracks().forEach((track) => track.stop());
+    this.stream = null;
+    this.opts.video.srcObject = null;
+  }
 
-    const present = this.isFacePresentPlaceholder();
-    if (!present) {
-      this.absentAccum += dt;
-      if (this.absentAccum >= ABSENT_SECONDS) {
-        this.emit("face_absent", Math.round(this.absentAccum));
-        this.absentAccum = 0; // 触发后清零，配合上层做 60s 间隔控制
+  private tick() {
+    if (!this.landmarker || this.opts.video.readyState < 2) return;
+    const now = performance.now();
+    if (this.opts.video.currentTime === this.lastVideoTime) return;
+    this.lastVideoTime = this.opts.video.currentTime;
+
+    try {
+      const result = this.landmarker.detectForVideo(this.opts.video, now);
+      const landmarks = result.faceLandmarks[0];
+      const reason = landmarks ? this.classify(landmarks) : "face_absent";
+      const elapsed = Math.max(0, (now - this.lastTick) / 1000);
+      this.lastTick = now;
+
+      if (!reason) {
+        this.activeReason = null;
+        this.distractedFor = 0;
+        this.opts.onAttention?.("focused");
+        return;
       }
-    } else {
-      this.absentAccum = 0;
+
+      if (this.activeReason !== reason) {
+        this.activeReason = reason;
+        this.distractedFor = 0;
+      }
+      this.distractedFor += elapsed;
+      this.opts.onAttention?.(reason);
+
+      if (this.distractedFor >= DISTRACTION_SECONDS) {
+        this.opts.onEvent({
+          event: "possible_distraction",
+          reason,
+          duration_seconds: Math.round(this.distractedFor),
+          timestamp: Math.floor(Date.now() / 1000),
+        });
+        this.distractedFor = 0;
+      }
+    } catch {
+      this.setStatus("error");
     }
   }
 
-  // TODO: 用真实模型替换。这里始终返回 true（默认认为在席），
-  // 使占位检测不会误触发；接入 MediaPipe 后按 landmark 返回结果。
-  private isFacePresentPlaceholder(): boolean {
-    return true;
-  }
+  private classify(face: NormalizedLandmark[]): CameraReason | null {
+    const nose = face[1];
+    const forehead = face[10];
+    const chin = face[152];
+    const leftCheek = face[234];
+    const rightCheek = face[454];
+    const leftEye = face[33];
+    const rightEye = face[263];
+    if (!nose || !forehead || !chin || !leftCheek || !rightCheek || !leftEye || !rightEye) return "face_absent";
 
-  private emit(reason: CameraReason, duration: number) {
-    this.opts.onEvent({
-      event: "possible_distraction",
-      reason,
-      duration_seconds: duration,
-      timestamp: Math.floor(Date.now() / 1000),
-    });
+    const faceWidth = Math.max(0.01, Math.abs(rightCheek.x - leftCheek.x));
+    const cheekCenter = (rightCheek.x + leftCheek.x) / 2;
+    if (Math.abs(nose.x - cheekCenter) / faceWidth > 0.17) return "head_turn";
+
+    const eyeY = (leftEye.y + rightEye.y) / 2;
+    const lowerFace = Math.max(0.01, chin.y - eyeY);
+    const noseRatio = (nose.y - eyeY) / lowerFace;
+    const faceCenterY = (forehead.y + chin.y) / 2;
+    if (noseRatio > 0.58 || faceCenterY > 0.72) return "head_down";
+
+    return null;
   }
 }

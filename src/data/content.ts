@@ -14,6 +14,16 @@ export const NODES: KnowledgeNode[] = [
 // ⚠️ TODO(B同学)：补齐其余节点的知识卡；snippet 只放必要片段，勿整段搬运
 export const CARDS: KnowledgeCard[] = [
   {
+    id: "card_role_1",
+    nodeId: "role",
+    title: "AI 产品经理到底在解决什么",
+    author: "知乎作者（演示内容）",
+    snippet:
+      "AI 产品经理需要同时理解用户问题与模型边界。他不只是把 AI 放进产品，还要判断哪些环节值得用 AI、如何衡量效果，以及模型出错时产品如何兜底。",
+    sourceUrl: "https://www.zhihu.com/",
+    aiSummary: "先找真问题，再看模型能不能稳定地解决，最后设计验证与兜底。",
+  },
+  {
     id: "card_llm_1",
     nodeId: "llm_boundary",
     title: "大语言模型到底擅长什么、不擅长什么",
@@ -32,6 +42,36 @@ export const CARDS: KnowledgeCard[] = [
       "结构化 Prompt 通常包含四部分：目标（要模型做什么）、背景（相关上下文）、约束（不能做什么、边界条件）、输出格式（希望返回的结构）。缺少输出格式时，模型回答会发散，难以被程序消费。",
     sourceUrl: "https://www.zhihu.com/",
     aiSummary: "目标 + 背景 + 约束 + 输出格式，四件套齐了，模型才好用、结果才可控。",
+  },
+  {
+    id: "card_rag_agent_1",
+    nodeId: "rag_agent",
+    title: "RAG 和 Agent 应该怎么选",
+    author: "知乎作者（演示内容）",
+    snippet:
+      "RAG 先检索可靠资料，再让模型基于资料回答；Agent 则让模型根据目标规划步骤、调用工具并根据结果继续行动。只需要一次查资料时不必做成 Agent。",
+    sourceUrl: "https://www.zhihu.com/",
+    aiSummary: "RAG 为回答补知识，Agent 为目标组织多步行动。",
+  },
+  {
+    id: "card_data_eval_1",
+    nodeId: "data_eval",
+    title: "AI 产品评测不能只看准确率",
+    author: "知乎作者（演示内容）",
+    snippet:
+      "AI 产品的评测需要同时关注任务完成率、事实准确性、稳定性、响应时间和成本。评测集要覆盖常规问题、边界情况与真实用户表达。",
+    sourceUrl: "https://www.zhihu.com/",
+    aiSummary: "先定义成功任务，再用覆盖真实场景的数据持续测量。",
+  },
+  {
+    id: "card_product_fit_1",
+    nodeId: "product_fit",
+    title: "什么问题值得用 AI 解决",
+    author: "知乎作者（演示内容）",
+    snippet:
+      "适合 AI 的问题通常具有大量非结构化信息、人工处理成本高、容许概率性结果，且可以用数据验证改善。对于零容错、规则固定的环节，传统程序往往更稳定。",
+    sourceUrl: "https://www.zhihu.com/",
+    aiSummary: "问题有价值、AI 有优势、错误可兜底、效果可衡量，四个条件缺一不可。",
   },
 ];
 
