@@ -28,6 +28,16 @@ export const CARDS: KnowledgeCard[] = [
   },
   // 节点 2：大语言模型的能力与边界（演示主打）
   {
+    id: "card_role_1",
+    nodeId: "role",
+    title: "AI 产品经理到底在解决什么",
+    author: "知乎作者（演示内容）",
+    snippet:
+      "AI 产品经理需要同时理解用户问题与模型边界。他不只是把 AI 放进产品，还要判断哪些环节值得用 AI、如何衡量效果，以及模型出错时产品如何兜底。",
+    sourceUrl: "https://www.zhihu.com/",
+    aiSummary: "先找真问题，再看模型能不能稳定地解决，最后设计验证与兜底。",
+  },
+  {
     id: "card_llm_1",
     nodeId: "llm_boundary",
     title: "大语言模型到底擅长什么、不擅长什么",

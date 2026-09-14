@@ -1,271 +1,196 @@
-import { useMemo, useState } from "react";
-import { useStore } from "../store/useStore";
-import { CARDS, NODES, DEMO_FOCUS_NODE, PRACTICE } from "../data/content";
+import { useMemo, useRef, useState } from "react";
+import type { Page } from "../App";
 import { evaluate } from "../agent/evaluate";
 import { useSupervisor } from "../agent/useSupervisor";
-import type { MasteryResult } from "../types";
-import KnowledgeMap from "../components/KnowledgeMap";
-import LiuKanshan from "../components/LiuKanshan";
 import CameraPanel from "../components/CameraPanel";
+import Icon from "../components/Icon";
 import KanshanPunch from "../components/KanshanPunch";
+import LiuKanshan from "../components/LiuKanshan";
+import { CARDS, DEMO_FOCUS_NODE, NODES, PRACTICE } from "../data/content";
+import { useStore } from "../store/useStore";
+import type { MasteryResult } from "../types";
 
-// 学习页（PRD 9.4）：左知识卡 / 中回答与反馈 / 右刘看山、摄像头、进度
-export default function Learn({ onFinish }: { onFinish: () => void }) {
-  const current = useStore((s) => s.current_node);
-  const cameraMode = useStore((s) => s.camera_mode);
-  const setCameraMode = useStore((s) => s.setCameraMode);
-  const setCurrentNode = useStore((s) => s.setCurrentNode);
-  const applyMastery = useStore((s) => s.applyMastery);
-  const attempts = useStore((s) => s.current_task_attempts);
-  const incAttempt = useStore((s) => s.incAttempt);
+export default function Learn({ onNavigate }: { onNavigate: (page: Page) => void }) {
+  const current = useStore((state) => state.current_node);
+  const cameraMode = useStore((state) => state.camera_mode);
+  const setCameraMode = useStore((state) => state.setCameraMode);
+  const setCurrentNode = useStore((state) => state.setCurrentNode);
+  const applyMastery = useStore((state) => state.applyMastery);
+  const attempts = useStore((state) => state.current_task_attempts);
+  const incAttempt = useStore((state) => state.incAttempt);
+  const mastery = useStore((state) => state.mastery_map);
 
-  const node = useMemo(() => NODES.find((n) => n.id === current) ?? NODES[0], [current]);
-  const card = useMemo(
-    () => CARDS.find((c) => c.nodeId === current) ?? CARDS[0],
-    [current]
-  );
-
+  const node = useMemo(() => NODES.find((item) => item.id === current) ?? NODES[0], [current]);
+  const card = useMemo(() => CARDS.find((item) => item.nodeId === current) ?? CARDS[0], [current]);
+  const practiceQuiz = useMemo(() => (PRACTICE[current] ?? [])[0] ?? null, [current]);
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MasteryResult | null>(null);
-  const [line, setLine] = useState("先读左边的知识卡，然后用你自己的话讲给我听。");
-
-  // 动态补学（PRD F07）：未完全掌握时弹一道应用题
   const [showPractice, setShowPractice] = useState(false);
   const [picked, setPicked] = useState<number | null>(null);
   const [practiceMsg, setPracticeMsg] = useState("");
-  const practiceQuiz = useMemo(() => (PRACTICE[current] ?? [])[0] ?? null, [current]);
+  const [line, setLine] = useState("我会陪你学，不会上传你的画面。");
+  const [question, setQuestion] = useState("");
+  const [assistantReply, setAssistantReply] = useState("大语言模型擅长处理语言模式，但事实与计算结果需要额外验证。");
+  const supervisorOriginRef = useRef<HTMLDivElement>(null);
+  const supervisor = useSupervisor();
 
-  const sup = useSupervisor();
+  const learnedCount = Object.values(mastery).filter((status) => status === "green").length;
+  const currentIndex = NODES.findIndex((item) => item.id === current);
+
+  function changeNode(id: string) {
+    setCurrentNode(id);
+    setResult(null);
+    setAnswer("");
+    setShowPractice(false);
+    setPicked(null);
+    setPracticeMsg("");
+    supervisor.resetForNewTask();
+  }
 
   async function submit() {
     if (!answer.trim() || loading) return;
     setLoading(true);
     setLine("嗯，我在听……");
+    setPracticeMsg("");
     incAttempt();
-    const r = await evaluate({
+    const nextResult = await evaluate({
       nodeTitle: node.title,
       cardSnippet: card?.snippet ?? "",
       userAnswer: answer,
       attempt: attempts + 1,
     });
-    setResult(r);
+    setResult(nextResult);
 
-    if (r.next_action === "advance" || r.mastery === "mastered") {
-      // 完全掌握：直接变绿推进
-      applyMastery(node.id, r);
+    if (nextResult.next_action === "advance" || nextResult.mastery === "mastered") {
+      applyMastery(node.id, nextResult);
       setShowPractice(false);
-      setLine("不错，这个营地你站稳了，可以往上爬了。");
+      setLine("不错，你已经能用自己的话讲明白了。");
     } else if (practiceQuiz) {
-      // 未完全掌握且有应用题：弹补学题，答对后再变绿（不立刻推进）
       setShowPractice(true);
       setPicked(null);
-      setPracticeMsg("");
       setLine("方向对了，还差一点。来做一道应用题巩固一下。");
     } else {
-      // 没有配套题则退回原逻辑，按评估结果处理
-      applyMastery(node.id, r);
-      setLine("方向对了，还差一点，先记住缺的这块。");
+      applyMastery(node.id, nextResult);
+      setLine("方向对了，再补一个具体例子会更清楚。");
     }
     setLoading(false);
   }
 
-  // 提交补学题答案（PRD F07：同节点最多补学两次，两次仍未过标黄允许继续）
   function submitPractice() {
     if (picked === null || !practiceQuiz || !result) return;
     if (picked === practiceQuiz.answerIndex) {
-      applyMastery(node.id, { ...result, mastery: "mastered", next_action: "advance" });
-      setPracticeMsg("答对了！这个知识点标记为已掌握 ✅");
-      setLine("漂亮，这下真的懂了，节点变绿，继续爬。");
+      const mastered: MasteryResult = { ...result, mastery: "mastered", next_action: "advance" };
+      applyMastery(node.id, mastered);
+      setResult(mastered);
+      setPracticeMsg("答对了，这个知识点已标记为掌握。");
+      setLine("漂亮，这下真的懂了，可以继续往下学。");
+      setShowPractice(false);
+      return;
+    }
+
+    incAttempt();
+    if (attempts + 1 >= 2) {
+      const partial: MasteryResult = { ...result, mastery: "partial", next_action: "practice" };
+      applyMastery(node.id, partial);
+      setResult(partial);
+      setPracticeMsg("暂时标记为待巩固，你可以继续学习，之后再回来看看。");
+      setLine("没关系，先记成待巩固，别卡在这里。");
       setShowPractice(false);
     } else {
-      incAttempt();
-      if (attempts + 1 >= 2) {
-        // 两次仍未过：标黄允许继续，不卡死（PRD F07）
-        applyMastery(node.id, { ...result, mastery: "partial", next_action: "practice" });
-        setPracticeMsg("这道也没答对，先标为待巩固，允许继续，之后再回来看看。");
-        setLine("没关系，先记成待巩固，别卡在这，我们往下走。");
-        setShowPractice(false);
-      } else {
-        setPracticeMsg("再想想，回到左边知识卡看看，再选一次。");
-        setLine("差一点，回去看看知识卡再选。");
-      }
+      setPracticeMsg("再想想，回到上方知识卡看看后重新选择。");
+      setLine("差一点，回去看看知识卡再选。");
     }
   }
 
-  function handleCameraEvent(e: Parameters<typeof sup.onCameraEvent>[0]) {
-    sup.onCameraEvent(e);
+  function askAssistant() {
+    if (!question.trim()) return;
+    setAssistantReply("可以先说你的判断，再举一个具体场景。如果还有不确定的地方，我会继续追问。");
+    setQuestion("");
   }
 
   return (
-    <div className="mx-auto grid min-h-screen max-w-6xl grid-cols-1 gap-4 p-4 lg:grid-cols-[1fr_1.4fr_0.9fr]">
-      {/* 左：知识卡 */}
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-mountain">
-          知乎知识卡
-        </div>
-        <h2 className="text-lg font-bold text-gray-900">{card?.title}</h2>
-        <div className="mt-1 text-xs text-gray-400">作者：{card?.author}</div>
-        <p className="mt-3 text-sm leading-relaxed text-gray-700">{card?.snippet}</p>
-        {card?.aiSummary && (
-          <div className="mt-3 rounded-lg bg-mountain-light p-3 text-sm text-mountain-dark">
-            <span className="mr-1 font-semibold">AI 划重点</span>
-            {card.aiSummary}
+    <main className="learn-page">
+      <header className="learn-header">
+        <button type="button" className="brand" onClick={() => onNavigate("home")}>看山督学局</button>
+        <div><b>AI 产品经理入门</b><span>/</span><span>第 {currentIndex + 1} 课</span></div>
+        <div><button type="button" onClick={() => onNavigate("course")}><Icon name="book" />课程目录</button><button type="button" onClick={() => onNavigate("my-learning")}>退出学习</button></div>
+      </header>
+
+      <div className="learn-grid">
+        <aside className="learn-outline panel">
+          <h2>AI 产品经理入门</h2>
+          <div className="progress-line"><span>学习进度 <b>{Math.max(learnedCount, 1)}/6</b></span><i><b style={{ width: `${Math.max(learnedCount, 1) / 6 * 100}%` }} /></i></div>
+          <ol>
+            {NODES.map((item, index) => {
+              const status = mastery[item.id];
+              return <li key={item.id} className={item.id === current ? "is-current" : status === "green" ? "is-done" : status === "locked" ? "is-locked" : ""}>
+                <button type="button" disabled={status === "locked"} onClick={() => changeNode(item.id)}>
+                  <span>{status === "green" ? <Icon name="check" /> : index + 1}</span><span><b>第 {index + 1} 课</b><small>{item.title}</small></span>{status === "locked" && <Icon name="lock" />}
+                </button>
+              </li>;
+            })}
+          </ol>
+          <button type="button" className="demo-link" onClick={() => changeNode(DEMO_FOCUS_NODE)}>跳到演示知识点</button>
+        </aside>
+
+        <section className="lesson-canvas panel">
+          <span className="section-label">第 {currentIndex + 1} 课</span>
+          <h1>{node.title}</h1>
+          <p className="lesson-canvas__intro">先读知识卡，再用自己的话讲给刘看山听。</p>
+          <article className="knowledge-card">
+            <div><span>知乎精选知识卡</span><h2>{card?.title}</h2><small>作者：{card?.author}</small></div>
+            <p>{card?.snippet}</p>
+            {card?.aiSummary && <div className="ai-highlight"><Icon name="brain" /><span><b>AI 划重点</b>{card.aiSummary}</span></div>}
+            <a href={card?.sourceUrl} target="_blank" rel="noreferrer">阅读知乎原文 ↗</a>
+          </article>
+
+          <div className="explain-task">
+            <h2>现在，讲给看山听</h2>
+            <textarea value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="不要照抄原文，用自己的话说，最好举个例子…" />
+            <button type="button" className="demo-fill" onClick={() => setAnswer("大语言模型很擅长写文案、做总结和多轮对话，能根据海量文本生成很自然的回答。")}>填入演示答案</button>
+            <div><button type="button" className="button button--outline" onClick={() => onNavigate("course")}>上一页</button><button type="button" className="button button--primary" onClick={submit} disabled={!answer.trim() || loading}>{loading ? "评估中…" : "讲给刘看山听"}<Icon name="arrow" /></button></div>
           </div>
-        )}
-        <a
-          href={card?.sourceUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 inline-block text-sm text-mountain underline"
-        >
-          阅读知乎原文 →
-        </a>
-        <div className="mt-3 border-t pt-2">
-          <KnowledgeMap onPick={(id) => setCurrentNode(id)} />
-        </div>
-      </section>
 
-      {/* 中：任务 + 回答 + 反馈 */}
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="text-xs font-semibold uppercase tracking-wide text-mountain">
-          当前任务 · {node.title}
-        </div>
-        <h2 className="mt-1 text-lg font-bold text-gray-900">
-          用你自己的话，向刘看山解释这个知识点
-        </h2>
+          {result && <div className="result-card" aria-live="polite"><strong>{result.mastery === "mastered" ? "已掌握" : result.mastery === "partial" ? "待巩固" : "需要再学一次"}</strong><p>{result.understood_points.join("；")}</p>{result.missing_points.length > 0 && <p>再补充：{result.missing_points.join("；")}</p>}<button type="button" onClick={() => onNavigate("finish")}>查看学习报告 →</button></div>}
 
-        <textarea
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          placeholder="不要照抄原文，用自己的话说，最好举个例子…"
-          className="mt-3 h-40 w-full resize-none rounded-lg border border-gray-200 p-3 text-sm outline-none focus:border-mountain"
-        />
-
-        <div className="mt-3 flex items-center gap-3">
-          <button
-            onClick={submit}
-            disabled={loading}
-            className="rounded-full bg-mountain px-6 py-2 font-semibold text-white hover:bg-mountain-dark disabled:opacity-50"
-          >
-            {loading ? "评估中…" : "讲给刘看山听"}
-          </button>
-          <button onClick={onFinish} className="text-sm text-gray-500 underline">
-            查看结课报告
-          </button>
-        </div>
-
-        {result && (
-          <div className="mt-4 rounded-xl border border-mountain-light bg-mountain-light/50 p-4">
-            <div className="text-sm font-semibold text-mountain-dark">
-              掌握度：
-              {result.mastery === "mastered"
-                ? "已掌握 ✅"
-                : result.mastery === "partial"
-                ? "待巩固 🟡"
-                : "未掌握 🔁"}
-            </div>
-            {result.understood_points.length > 0 && (
-              <div className="mt-2 text-sm text-gray-700">
-                <b>你已掌握：</b>
-                {result.understood_points.join("；")}
+          {showPractice && practiceQuiz && (
+            <section className="practice-card" aria-label="补学应用题">
+              <div className="practice-card__title"><span className="icon-tile"><Icon name="book" /></span><div><strong>补学应用题</strong><p>{practiceQuiz.question}</p></div></div>
+              <div className="practice-options">
+                {practiceQuiz.options.map((option, index) => (
+                  <label className={picked === index ? "is-selected" : ""} key={option}>
+                    <input type="radio" name="practice" checked={picked === index} onChange={() => setPicked(index)} />
+                    <span>{option}</span>
+                  </label>
+                ))}
               </div>
-            )}
-            {result.missing_points.length > 0 && (
-              <div className="mt-1 text-sm text-gray-700">
-                <b>还需补充：</b>
-                {result.missing_points.join("；")}
-              </div>
-            )}
-          </div>
-        )}
+              <button type="button" className="button button--primary" onClick={submitPractice} disabled={picked === null}>提交答案</button>
+              {practiceMsg && <p className="practice-card__message" aria-live="polite">{practiceMsg}</p>}
+            </section>
+          )}
+          {!showPractice && practiceMsg && <p className="practice-confirm" aria-live="polite">{practiceMsg}</p>}
+        </section>
 
-        {/* 动态补学题（PRD F07）：未完全掌握时出现，答对才变绿 */}
-        {showPractice && practiceQuiz && (
-          <div className="mt-4 rounded-xl border-2 border-mountain bg-white p-4">
-            <div className="text-sm font-semibold text-mountain-dark">
-              📝 补学应用题
+        <aside className="learn-tools">
+          <section className="assistant-card panel">
+            <div className="tool-title"><span className="icon-tile"><Icon name="message" /></span><h2>问问 AI 助教</h2></div>
+            <div className="assistant-message">{assistantReply}</div>
+            <label className="assistant-input"><input value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") askAssistant(); }} placeholder="输入你不懂的问题" /><button type="button" onClick={askAssistant} aria-label="发送问题"><Icon name="send" /></button></label>
+          </section>
+
+          <section className={`supervisor-live panel ${supervisor.reaction === "punch" ? "is-launching" : ""}`}>
+            <div className="tool-title"><span className="icon-tile"><Icon name="focus" /></span><div><h2>{cameraMode ? "专注模式进行中" : "刘看山正在陪学"}</h2><span className="live-dot"><i />{cameraMode ? "本地检测中" : "普通陪学模式"}</span></div></div>
+            <div ref={supervisorOriginRef} className="supervisor-launchpad">
+              <LiuKanshan reaction={supervisor.reaction} line={line} showTitle={false} />
             </div>
-            <p className="mt-2 text-sm text-gray-800">{practiceQuiz.question}</p>
-            <div className="mt-3 space-y-2">
-              {practiceQuiz.options.map((opt, i) => (
-                <label
-                  key={i}
-                  className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm
-                    ${picked === i ? "border-mountain bg-mountain-light" : "border-gray-200 hover:bg-gray-50"}`}
-                >
-                  <input
-                    type="radio"
-                    name="practice"
-                    checked={picked === i}
-                    onChange={() => setPicked(i)}
-                  />
-                  {opt}
-                </label>
-              ))}
-            </div>
-            <button
-              onClick={submitPractice}
-              disabled={picked === null}
-              className="mt-3 rounded-full bg-mountain px-6 py-2 text-sm font-semibold text-white hover:bg-mountain-dark disabled:opacity-50"
-            >
-              提交答案
-            </button>
-            {practiceMsg && (
-              <div className="mt-2 text-sm text-mountain-dark">{practiceMsg}</div>
-            )}
-          </div>
-        )}
-      </section>
+          </section>
 
-      {/* 右：刘看山 + 摄像头 + 进度 */}
-      <section className="space-y-4">
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <LiuKanshan reaction={sup.reaction} line={line} />
-        </div>
+          <CameraPanel enabled={cameraMode} onToggle={setCameraMode} onEvent={supervisor.onCameraEvent} onCorrect={supervisor.correctMisjudge} />
+        </aside>
+      </div>
 
-        <CameraPanel
-          enabled={cameraMode}
-          onToggle={setCameraMode}
-          onEvent={handleCameraEvent}
-          onCorrect={sup.correctMisjudge}
-        />
-
-        {/* 演示模式：手动触发铁拳的保命后路（PRD 第十七章） */}
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="mb-2 text-xs font-semibold text-gray-400">演示模式</div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={sup.forcePunch}
-              className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm text-white hover:bg-orange-600"
-            >
-              触发看山铁拳
-            </button>
-            <button
-              onClick={() => setCurrentNode(DEMO_FOCUS_NODE)}
-              className="rounded-lg bg-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-300"
-            >
-              跳到演示知识点
-            </button>
-            <button
-              onClick={() =>
-                // 一键填入"故意漏掉模型会出错"的演示答案（脚本 2:00 段），彩排不用现场打字
-                setAnswer(
-                  "大语言模型很擅长写文案、做总结和多轮对话，能根据海量文本生成很自然的回答。"
-                )
-              }
-              className="rounded-lg bg-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-300"
-            >
-              填入演示答案
-            </button>
-          </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-gray-400">
-            演示顺序：跳到演示知识点 → 触发铁拳 →「我回来了」→ 填入演示答案 → 讲给刘看山听 → 补学题答对 → 节点变绿。
-          </p>
-        </div>
-      </section>
-
-      <KanshanPunch open={sup.reaction === "punch"} onBack={sup.dismiss} />
-    </div>
+      <KanshanPunch open={supervisor.reaction === "punch"} originRef={supervisorOriginRef} onBack={supervisor.dismiss} />
+    </main>
   );
 }

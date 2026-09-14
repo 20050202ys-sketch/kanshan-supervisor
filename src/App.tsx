@@ -1,24 +1,32 @@
 import { useState } from "react";
 import Home from "./pages/Home";
+import Courses from "./pages/Courses";
+import CourseDetail from "./pages/CourseDetail";
+import MyLearning from "./pages/MyLearning";
 import Quiz from "./pages/Quiz";
 import Learn from "./pages/Learn";
 import Finish from "./pages/Finish";
 
-export type Page = "home" | "quiz" | "learn" | "finish";
+export type Page = "home" | "courses" | "course" | "my-learning" | "quiz" | "learn" | "finish";
 
-// 1 天版用极简状态路由，不引入 react-router，减少体积与心智负担
+// MVP 使用轻量状态路由，避免为了六个页面额外引入路由依赖。
 export default function App() {
   const [page, setPage] = useState<Page>("home");
 
+  const navigate = (next: Page) => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    setPage(next);
+  };
+
   return (
-    <div className="min-h-screen">
-      {page === "home" && <Home onStart={() => setPage("quiz")} />}
-      {page === "quiz" && (
-        // 摸底完成 -> 进入学习页（结果暂用于演示，学习路线仍按顺序解锁）
-        <Quiz onDone={() => setPage("learn")} />
-      )}
-      {page === "learn" && <Learn onFinish={() => setPage("finish")} />}
-      {page === "finish" && <Finish onRestart={() => setPage("home")} />}
+    <div className="app-shell">
+      {page === "home" && <Home onNavigate={navigate} />}
+      {page === "courses" && <Courses onNavigate={navigate} />}
+      {page === "course" && <CourseDetail onNavigate={navigate} />}
+      {page === "my-learning" && <MyLearning onNavigate={navigate} />}
+      {page === "quiz" && <Quiz onDone={() => navigate("learn")} />}
+      {page === "learn" && <Learn onNavigate={navigate} />}
+      {page === "finish" && <Finish onNavigate={navigate} />}
     </div>
   );
 }

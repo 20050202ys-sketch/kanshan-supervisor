@@ -1,36 +1,63 @@
+import type { Page } from "../App";
+import Icon from "../components/Icon";
 import LiuKanshan from "../components/LiuKanshan";
-import { NODES } from "../data/content";
+import SiteHeader from "../components/SiteHeader";
+import { COURSE_LIST } from "../data/courses";
 
-// 首页（PRD 9.1 / F01）
-export default function Home({ onStart }: { onStart: () => void }) {
+export default function Home({ onNavigate }: { onNavigate: (page: Page) => void }) {
   return (
-    <div className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center px-6 text-center">
-      <LiuKanshan reaction="idle" />
-      <h1 className="mt-6 text-3xl font-bold text-mountain-dark">看山督学局</h1>
-      <p className="mt-2 text-lg text-gray-700">3 天入门 AI 产品经理，每天约 15 分钟</p>
-      <p className="mt-1 text-sm text-gray-500">
-        刘看山陪你从「看过」走向「学会」——读知乎精选、讲给他听、被他追问、拿到反馈。
-      </p>
+    <main className="page page--home">
+      <div className="page-wrap">
+        <SiteHeader current="home" onNavigate={onNavigate} />
 
-      <div className="mt-8 grid w-full grid-cols-2 gap-3 sm:grid-cols-3">
-        {NODES.map((n) => (
-          <div
-            key={n.id}
-            className="rounded-lg border border-mountain-light bg-white px-3 py-3 text-sm text-gray-700"
-          >
-            <span className="mr-1 font-semibold text-mountain">{n.order}</span>
-            {n.title}
+        <section className="home-hero">
+          <div className="home-hero__main">
+            <h1>选一门想学的课，<br />刘看山陪你真正学会</h1>
+            <p>好奇，动手，坚持。把“我看过”变成“我会了”。</p>
+
+            <article className="continue-card">
+              <div className="course-mark"><span>AI</span></div>
+              <div className="continue-card__body">
+                <span className="badge">3 天入门</span>
+                <h2>AI 产品经理入门</h2>
+                <div className="progress-line">
+                  <span>已学习 <b>2/6</b></span>
+                  <i><b style={{ width: "33%" }} /></i>
+                </div>
+              </div>
+              <button className="button button--primary" type="button" onClick={() => onNavigate("quiz")}>
+                继续学习 <Icon name="arrow" />
+              </button>
+            </article>
           </div>
-        ))}
-      </div>
 
-      <button
-        onClick={onStart}
-        className="mt-10 rounded-full bg-mountain px-10 py-3 text-lg font-semibold text-white shadow hover:bg-mountain-dark"
-      >
-        开始学习
-      </button>
-      <p className="mt-3 text-xs text-gray-400">未登录也可体验 · 摄像头默认关闭</p>
-    </div>
+          <aside className="supervisor-card supervisor-card--hero">
+            <div className="supervisor-card__copy">
+              <h2>刘看山正在<br />陪你学习</h2>
+              <div className="status-row"><i />今日在线</div>
+              <p>不着急，一步一步来。</p>
+            </div>
+            <LiuKanshan reaction="idle" showTitle={false} />
+            <button type="button" className="text-button" onClick={() => onNavigate("my-learning")}>查看陪学设置 <Icon name="arrow" /></button>
+          </aside>
+        </section>
+
+        <section className="section-block">
+          <div className="section-heading">
+            <div><h2>探索课程</h2><p>根据你的目标，找到下一个想学的能力。</p></div>
+            <button type="button" className="text-button" onClick={() => onNavigate("courses")}>全部课程 <Icon name="arrow" /></button>
+          </div>
+          <div className="course-preview-grid">
+            {COURSE_LIST.slice(1, 4).map((course) => (
+              <article className="course-mini" key={course.id}>
+                <span className="course-mini__icon">{course.icon}</span>
+                <div><h3>{course.title}</h3><p>{course.summary}</p></div>
+                <span className="muted-badge">即将开放</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+    </main>
   );
 }
