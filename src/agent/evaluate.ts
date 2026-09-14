@@ -64,7 +64,7 @@ export interface EvaluateInput {
 }
 
 export async function evaluate(input: EvaluateInput): Promise<MasteryResult> {
-  // 无 key：直接兜底，保证演示不卡（可在 UI 用"演示模式"手动给出理想结果）
+  // 无 key：直接返回兜底结果，保证学习流程可继续。
   if (!API_KEY) return FALLBACK;
 
   const userMsg = `知识点：${input.nodeTitle}

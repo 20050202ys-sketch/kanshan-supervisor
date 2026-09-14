@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Page } from "../App";
 import { evaluate } from "../agent/evaluate";
 import { useSupervisor } from "../agent/useSupervisor";
@@ -28,6 +28,7 @@ export default function Learn({ onNavigate }: { onNavigate: (page: Page) => void
   const [line, setLine] = useState("我会陪你学，不会上传你的画面。");
   const [question, setQuestion] = useState("");
   const [assistantReply, setAssistantReply] = useState("大语言模型擅长处理语言模式，但事实与计算结果需要额外验证。");
+  const supervisorOriginRef = useRef<HTMLDivElement>(null);
   const supervisor = useSupervisor();
 
   const learnedCount = Object.values(mastery).filter((status) => status === "green").length;
@@ -101,17 +102,18 @@ export default function Learn({ onNavigate }: { onNavigate: (page: Page) => void
             <label className="assistant-input"><input value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") askAssistant(); }} placeholder="输入你不懂的问题" /><button type="button" onClick={askAssistant} aria-label="发送问题"><Icon name="send" /></button></label>
           </section>
 
-          <section className="supervisor-live panel">
+          <section className={`supervisor-live panel ${supervisor.reaction === "punch" ? "is-launching" : ""}`}>
             <div className="tool-title"><span className="icon-tile"><Icon name="focus" /></span><div><h2>{cameraMode ? "专注模式进行中" : "刘看山正在陪学"}</h2><span className="live-dot"><i />{cameraMode ? "本地检测中" : "普通陪学模式"}</span></div></div>
-            <LiuKanshan reaction={supervisor.reaction} line={line} showTitle={false} />
-            <button type="button" className="demo-punch" onClick={supervisor.forcePunch}>演示：触发看山提醒</button>
+            <div ref={supervisorOriginRef} className="supervisor-launchpad">
+              <LiuKanshan reaction={supervisor.reaction} line={line} showTitle={false} />
+            </div>
           </section>
 
           <CameraPanel enabled={cameraMode} onToggle={setCameraMode} onEvent={supervisor.onCameraEvent} onCorrect={supervisor.correctMisjudge} />
         </aside>
       </div>
 
-      <KanshanPunch open={supervisor.reaction === "punch"} onBack={supervisor.dismiss} />
+      <KanshanPunch open={supervisor.reaction === "punch"} originRef={supervisorOriginRef} onBack={supervisor.dismiss} />
     </main>
   );
 }

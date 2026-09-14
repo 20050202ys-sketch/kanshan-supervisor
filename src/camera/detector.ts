@@ -11,7 +11,8 @@ export interface DetectorOptions {
 export type DetectStatus = "idle" | "starting" | "running" | "denied" | "error";
 export type AttentionState = "focused" | "face_absent" | "head_turn" | "head_down";
 
-const DISTRACTION_SECONDS = 6;
+const DISTRACTION_MS = 6_000;
+const FOCUSED_RESET_GRACE_MS = 900;
 const SAMPLE_MS = 650;
 const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 
@@ -36,13 +37,15 @@ function getLandmarker() {
 export class DistractionDetector {
   private stream: MediaStream | null = null;
   private timer: number | null = null;
-  private distractedFor = 0;
-  private lastTick = 0;
+  private distractedStartedAt: number | null = null;
+  private focusedStartedAt: number | null = null;
   private lastVideoTime = -1;
   private opts: DetectorOptions;
   private status: DetectStatus = "idle";
   private landmarker: FaceLandmarker | null = null;
   private activeReason: CameraReason | null = null;
+  private smoothedNoseRatio: number | null = null;
+  private smoothedFaceCenterY: number | null = null;
 
   constructor(opts: DetectorOptions) {
     this.opts = opts;
@@ -69,7 +72,6 @@ export class DistractionDetector {
       this.opts.video.srcObject = this.stream;
       await this.opts.video.play();
       this.landmarker = await getLandmarker();
-      this.lastTick = performance.now();
       this.setStatus("running");
       this.timer = window.setInterval(() => this.tick(), SAMPLE_MS);
       return true;
@@ -84,8 +86,11 @@ export class DistractionDetector {
     if (this.timer) window.clearInterval(this.timer);
     this.timer = null;
     this.stopTracks();
-    this.distractedFor = 0;
+    this.distractedStartedAt = null;
+    this.focusedStartedAt = null;
     this.activeReason = null;
+    this.smoothedNoseRatio = null;
+    this.smoothedFaceCenterY = null;
     this.opts.onAttention?.("focused");
     this.setStatus("idle");
   }
@@ -110,31 +115,29 @@ export class DistractionDetector {
       const result = this.landmarker.detectForVideo(this.opts.video, now);
       const landmarks = result.faceLandmarks[0];
       const reason = landmarks ? this.classify(landmarks) : "face_absent";
-      const elapsed = Math.max(0, (now - this.lastTick) / 1000);
-      this.lastTick = now;
-
       if (!reason) {
-        this.activeReason = null;
-        this.distractedFor = 0;
-        this.opts.onAttention?.("focused");
+        if (this.focusedStartedAt === null) this.focusedStartedAt = now;
+        if (now - this.focusedStartedAt >= FOCUSED_RESET_GRACE_MS) {
+          this.activeReason = null;
+          this.distractedStartedAt = null;
+          this.opts.onAttention?.("focused");
+        }
         return;
       }
 
-      if (this.activeReason !== reason) {
-        this.activeReason = reason;
-        this.distractedFor = 0;
-      }
-      this.distractedFor += elapsed;
+      this.focusedStartedAt = null;
+      this.activeReason = reason;
+      if (this.distractedStartedAt === null) this.distractedStartedAt = now;
       this.opts.onAttention?.(reason);
 
-      if (this.distractedFor >= DISTRACTION_SECONDS) {
+      if (now - this.distractedStartedAt >= DISTRACTION_MS) {
         this.opts.onEvent({
           event: "possible_distraction",
           reason,
-          duration_seconds: Math.round(this.distractedFor),
+          duration_seconds: 6,
           timestamp: Math.floor(Date.now() / 1000),
         });
-        this.distractedFor = 0;
+        this.distractedStartedAt = now;
       }
     } catch {
       this.setStatus("error");
@@ -159,7 +162,9 @@ export class DistractionDetector {
     const lowerFace = Math.max(0.01, chin.y - eyeY);
     const noseRatio = (nose.y - eyeY) / lowerFace;
     const faceCenterY = (forehead.y + chin.y) / 2;
-    if (noseRatio > 0.58 || faceCenterY > 0.72) return "head_down";
+    this.smoothedNoseRatio = this.smoothedNoseRatio === null ? noseRatio : this.smoothedNoseRatio * 0.72 + noseRatio * 0.28;
+    this.smoothedFaceCenterY = this.smoothedFaceCenterY === null ? faceCenterY : this.smoothedFaceCenterY * 0.72 + faceCenterY * 0.28;
+    if (this.smoothedNoseRatio > 0.54 || this.smoothedFaceCenterY > 0.7) return "head_down";
 
     return null;
   }
