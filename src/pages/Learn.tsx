@@ -247,7 +247,21 @@ export default function Learn({ onFinish }: { onFinish: () => void }) {
             >
               跳到演示知识点
             </button>
+            <button
+              onClick={() =>
+                // 一键填入"故意漏掉模型会出错"的演示答案（脚本 2:00 段），彩排不用现场打字
+                setAnswer(
+                  "大语言模型很擅长写文案、做总结和多轮对话，能根据海量文本生成很自然的回答。"
+                )
+              }
+              className="rounded-lg bg-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-300"
+            >
+              填入演示答案
+            </button>
           </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-gray-400">
+            演示顺序：跳到演示知识点 → 触发铁拳 →「我回来了」→ 填入演示答案 → 讲给刘看山听 → 补学题答对 → 节点变绿。
+          </p>
         </div>
       </section>
 
