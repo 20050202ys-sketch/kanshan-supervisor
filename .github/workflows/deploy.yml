@@ -24,13 +24,9 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      # 用仓库名作为 base，确保 Pages 子路径下资源可加载
-      # LLM 配置从 GitHub Secrets 注入（仅演示用，勿放重要 key）
+      # 用仓库名作为 base，确保 Pages 子路径下资源可加载。
+      # GitHub Pages 是公开静态站点，禁止在 Vite 构建阶段注入任何 LLM 密钥。
       - run: DEPLOY_BASE="/${GITHUB_REPOSITORY#*/}/" npm run build
-        env:
-          VITE_LLM_API_KEY: ${{ secrets.VITE_LLM_API_KEY }}
-          VITE_LLM_BASE_URL: ${{ secrets.VITE_LLM_BASE_URL }}
-          VITE_LLM_MODEL: ${{ secrets.VITE_LLM_MODEL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
